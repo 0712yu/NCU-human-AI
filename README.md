@@ -12,6 +12,12 @@
 
 </div>
 
+<div align="center">
+
+ **GitHub 仓库**：https://github.com/0712yu/NCU-human-AI ｜ 状态：公开
+
+</div>
+
 ---
 
 ## 一、个人信息
