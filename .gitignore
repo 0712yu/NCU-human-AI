@@ -1,0 +1,67 @@
+# ============================================================
+#  .gitignore —— 本课程作品集仓库的“忽略清单”
+#  作用：告诉 Git 哪些文件不需要被上传/备份（如缓存、密钥、大文件）
+# ============================================================
+
+# ---------- 操作系统自动生成的文件 ----------
+.DS_Store            # macOS 文件夹配置文件
+Thumbs.db            # Windows 缩略图缓存
+desktop.ini          # Windows 文件夹显示设置
+
+# ---------- Python 编译产物与缓存 ----------
+__pycache__/         # Python 运行缓存目录
+*.py[cod]            # .pyc / .pyo / .pyd 编译文件
+*$py.class
+*.so                 # 编译扩展
+build/               # 打包构建目录
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ---------- 虚拟环境（体积大且与机器绑定，永不提交） ----------
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ---------- Jupyter Notebook 检查点 ----------
+.ipynb_checkpoints/
+# 注意：.ipynb 实验文件本身要提交，仅忽略上面的自动检查点
+
+# ---------- 密钥与隐私配置（严禁外泄！） ----------
+.env                 # 环境变量（常含 API Key）
+.env.*
+*.key
+*.pem
+secrets.*
+*credentials*
+config.local.*
+
+# ---------- 大型数据与模型文件（按需取消注释） ----------
+# 默认提交小样本数据；如需忽略大数据文件，取消下面注释：
+# *.csv
+# *.xlsx
+# *.pkl
+# *.h5
+# *.pt
+# *.onnx
+# *.zip
+# *.rar
+
+# ---------- 编辑器 / IDE 配置 ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------- 日志与工具缓存 ----------
+*.log
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.history/
