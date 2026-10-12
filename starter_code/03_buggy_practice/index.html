@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>单摆模拟器（练习：含 bug）</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1a24; }
+  #c { display: block; }
+  #hud {
+    position: fixed; left: 16px; top: 14px;
+    font: 13px/1.7 ui-monospace, "Cascadia Code", Consolas, monospace;
+    color: #9fe7e0; text-shadow: 0 0 6px rgba(80, 220, 200, .5);
+    pointer-events: none; user-select: none;
+  }
+  #hud b { color: #e8fff9; }
+  #hint {
+    position: fixed; right: 16px; bottom: 14px;
+    font: 12px ui-monospace, monospace; color: #5a6b8c; user-select: none;
+  }
+  #panel {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    display: flex; gap: 18px; align-items: center; flex-wrap: wrap; justify-content: center;
+    padding: 12px 18px; border-radius: 12px; max-width: 94vw;
+    background: rgba(28, 30, 44, 0.82); border: 1px solid rgba(120, 160, 255, 0.18);
+    backdrop-filter: blur(6px);
+    font: 12px/1.5 ui-monospace, Consolas, monospace; color: #9fe7e0;
+    box-shadow: 0 0 18px rgba(80, 220, 200, 0.12);
+  }
+  #panel .grp { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
+  #panel label { color: #8fa6c8; }
+  #panel .val { color: #e8fff9; }
+  #panel input[type=range] {
+    -webkit-appearance: none; appearance: none; height: 4px; border-radius: 3px;
+    background: linear-gradient(90deg, #56e6d2, #5a6b8c); outline: none;
+  }
+  #panel input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: #7af0e0; box-shadow: 0 0 8px #5ff0d8; cursor: pointer;
+  }
+  #panel input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border: none; border-radius: 50%;
+    background: #7af0e0; box-shadow: 0 0 8px #5ff0d8; cursor: pointer;
+  }
+  #panel button {
+    margin-top: 2px; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    background: #1f6f63; color: #eafff9; border: 1px solid #56e6d2;
+    font: 12px ui-monospace, monospace; letter-spacing: .5px;
+    box-shadow: 0 0 10px rgba(95, 240, 216, .25);
+  }
+  #panel button:hover { background: #278a7b; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div>单摆模拟器 <span style="color:#5a6b8c">（练习：含 1 处 bug）</span></div>
+  <div>初始摆角 = <b>45°</b></div>
+  <div>当前摆角 θ = <b id="ang">--</b></div>
+  <div>角速度 ω = <b id="vel">--</b></div>
+  <div>理论周期 T ≈ <b id="per">--</b></div>
+</div>
+<div id="hint">拖动摆球可重新设定初始角度；点击“重置摆动”会触发一个 bug（请看控制台）</div>
+<div id="panel">
+  <div class="grp">
+    <label>摆长 L：<span class="val" id="vL">200 px</span></label>
+    <input type="range" id="sL" min="100" max="350" step="1" value="200">
+  </div>
+  <div class="grp">
+    <label>重力 g：<span class="val" id="vG">9.8</span></label>
+    <input type="range" id="sG" min="1" max="25" step="0.1" value="9.8">
+  </div>
+  <div class="grp">
+    <label>阻尼 d：<span class="val" id="vD">0.004</span></label>
+    <input type="range" id="sD" min="0" max="0.010" step="0.001" value="0.004">
+  </div>
+  <!-- BUG: 内联 onclick 只能访问全局作用域，而 resetAnimation 定义在下方 IIFE 闭包内 -->
+  <button id="reset" onclick="resetAnimation()">重置摆动</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+
+  // ---------- 物理参数 ----------
+  var g = 9.8;
+  var Lpx = 200;
+  var damping = 0.004;
+  var PIVOT_Y = 90;
+
+  // ---------- 状态 ----------
+  var theta = 45 * Math.PI / 180;
+  var omega = 0;
+  var dragging = false;
+  var last = performance.now();
+  var trail = [];
+  var TRAIL_MAX = 28;
+
+  // ---------- 画布尺寸 ----------
+  var W = 0, H = 0, cx = 0;
+  function resize() {
+    var dpr = window.devicePixelRatio || 1;
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx = W / 2;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- 交互：拖动设定初始角度 ----------
+  function pointerAngle(e) {
+    var px = (e.touches ? e.touches[0].clientX : e.clientX) - cx;
+    var py = (e.touches ? e.touches[0].clientY : e.clientY) - PIVOT_Y;
+    return Math.atan2(px, py);
+  }
+  function onDown(e) { dragging = true; theta = pointerAngle(e); omega = 0; trail.length = 0; e.preventDefault(); }
+  function onMove(e) { if (dragging) theta = pointerAngle(e); }
+  function onUp() { if (dragging) { dragging = false; omega = 0; } }
+  canvas.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  canvas.addEventListener('touchstart', onDown, { passive: false });
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('touchend', onUp);
+
+  // ---------- 控制面板：滑块 ----------
+  var sL = document.getElementById('sL');
+  var sG = document.getElementById('sG');
+  var sD = document.getElementById('sD');
+  var vL = document.getElementById('vL');
+  var vG = document.getElementById('vG');
+  var vD = document.getElementById('vD');
+  function syncControls() {
+    Lpx = parseFloat(sL.value);
+    g = parseFloat(sG.value);
+    damping = parseFloat(sD.value);
+    vL.textContent = Lpx.toFixed(0) + ' px';
+    vG.textContent = g.toFixed(1);
+    vD.textContent = damping.toFixed(3);
+  }
+  [sL, sG, sD].forEach(function (el) { el.addEventListener('input', syncControls); });
+  syncControls();
+
+  // ---------- 重置（故意留在闭包内，不暴露到全局，制造 bug） ----------
+  // 该函数在 IIFE 作用域内，全局不可见；
+  // 按钮用内联 onclick="resetAnimation()" 调用，点击时全局查找不到 → ReferenceError。
+  function resetAnimation() {
+    theta = 45 * Math.PI / 180;
+    omega = 0;
+    trail.length = 0;
+  }
+
+  // ---------- 物理积分（半隐式欧拉，含阻尼） ----------
+  function step(dt) {
+    if (dragging) return;
+    var Lphys = Lpx / 100;
+    var alpha = -(g / Lphys) * Math.sin(theta) - damping * omega;
+    omega += alpha * dt;
+    theta += omega * dt;
+  }
+
+  // ---------- 绘制 ----------
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#1a1a24';
+    ctx.fillRect(0, 0, W, H);
+
+    var Lphys = Lpx / 100;
+    var bx = cx + Lpx * Math.sin(theta);
+    var by = PIVOT_Y + Lpx * Math.cos(theta);
+
+    trail.push({ x: bx, y: by });
+    if (trail.length > TRAIL_MAX) trail.shift();
+    for (var i = 0; i < trail.length; i++) {
+      var t = trail[i];
+      var a = (i / trail.length) * 0.35;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(90, 230, 210, ' + a + ')';
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(cx, PIVOT_Y);
+    ctx.lineTo(bx, by);
+    ctx.strokeStyle = 'rgba(150, 170, 210, 0.55)';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(120, 160, 255, 0.5)';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.beginPath();
+    ctx.arc(cx, PIVOT_Y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#aab4d4';
+    ctx.fill();
+
+    var r = 18;
+    var grad = ctx.createRadialGradient(bx, by, 2, bx, by, r * 2.2);
+    grad.addColorStop(0, '#dffcff');
+    grad.addColorStop(0.35, '#56e6d2');
+    grad.addColorStop(1, 'rgba(40, 120, 140, 0)');
+    ctx.beginPath();
+    ctx.arc(bx, by, r * 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#7af0e0';
+    ctx.shadowColor = '#5ff0d8';
+    ctx.shadowBlur = 22;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    document.getElementById('ang').textContent = (theta * 180 / Math.PI).toFixed(1) + '°';
+    document.getElementById('vel').textContent = omega.toFixed(2) + ' rad/s';
+    document.getElementById('per').textContent = (2 * Math.PI * Math.sqrt(Lphys / g)).toFixed(2) + ' s';
+  }
+
+  // ---------- 主循环 ----------
+  function loop(now) {
+    var dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.05) dt = 0.05;
+    var sub = 4;
+    for (var i = 0; i < sub; i++) step(dt / sub);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
