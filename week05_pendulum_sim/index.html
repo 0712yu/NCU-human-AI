@@ -18,19 +18,64 @@
     position: fixed; right: 16px; bottom: 14px;
     font: 12px ui-monospace, monospace; color: #5a6b8c; user-select: none;
   }
+  #panel {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    display: flex; gap: 18px; align-items: center; flex-wrap: wrap; justify-content: center;
+    padding: 12px 18px; border-radius: 12px; max-width: 94vw;
+    background: rgba(28, 30, 44, 0.82); border: 1px solid rgba(120, 160, 255, 0.18);
+    backdrop-filter: blur(6px);
+    font: 12px/1.5 ui-monospace, Consolas, monospace; color: #9fe7e0;
+    box-shadow: 0 0 18px rgba(80, 220, 200, 0.12);
+  }
+  #panel .grp { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
+  #panel label { color: #8fa6c8; }
+  #panel .val { color: #e8fff9; }
+  #panel input[type=range] {
+    -webkit-appearance: none; appearance: none; height: 4px; border-radius: 3px;
+    background: linear-gradient(90deg, #56e6d2, #5a6b8c); outline: none;
+  }
+  #panel input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: #7af0e0; box-shadow: 0 0 8px #5ff0d8; cursor: pointer;
+  }
+  #panel input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border: none; border-radius: 50%;
+    background: #7af0e0; box-shadow: 0 0 8px #5ff0d8; cursor: pointer;
+  }
+  #panel button {
+    margin-top: 2px; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    background: #1f6f63; color: #eafff9; border: 1px solid #56e6d2;
+    font: 12px ui-monospace, monospace; letter-spacing: .5px;
+    box-shadow: 0 0 10px rgba(95, 240, 216, .25);
+  }
+  #panel button:hover { background: #278a7b; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
   <div>单摆模拟器 <span style="color:#5a6b8c">Pendulum Simulator</span></div>
-  <div>摆长 L = <b>200 px</b> · 重力 g = <b>9.8</b></div>
-  <div>初始摆角 = <b>45°</b></div>
+  <div>初始摆角 = <b>45°</b>（点“重置摆动”复位）</div>
   <div>当前摆角 θ = <b id="ang">--</b></div>
   <div>角速度 ω = <b id="vel">--</b></div>
   <div>理论周期 T ≈ <b id="per">--</b></div>
 </div>
 <div id="hint">用鼠标 / 手指拖动摆球可重新设定初始角度并松手释放</div>
+<div id="panel">
+  <div class="grp">
+    <label>摆长 L：<span class="val" id="vL">200 px</span></label>
+    <input type="range" id="sL" min="100" max="350" step="1" value="200">
+  </div>
+  <div class="grp">
+    <label>重力 g：<span class="val" id="vG">9.8</span></label>
+    <input type="range" id="sG" min="1" max="25" step="0.1" value="9.8">
+  </div>
+  <div class="grp">
+    <label>阻尼 d：<span class="val" id="vD">0.004</span></label>
+    <input type="range" id="sD" min="0" max="0.010" step="0.001" value="0.004">
+  </div>
+  <button id="reset">重置摆动</button>
+</div>
 
 <script>
 (function () {
@@ -39,9 +84,9 @@
   var ctx = canvas.getContext('2d');
 
   // ---------- 物理参数 ----------
-  var g = 9.8;          // 重力加速度 m/s^2
-  var L_PHYS = 2.0;     // 物理摆长（米），用于真实摆动节奏
-  var L_PX = 200;       // 屏幕绘制摆长（px）—— 满足约束 L = 200px
+  var g = 9.8;          // 重力加速度 m/s^2（滑块可调 1~25）
+  var Lpx = 200;        // 屏幕绘制摆长（px，滑块可调 100~350）
+  var damping = 0.004;  // 阻尼系数（滑块可调 0.000~0.010）
   var PIVOT_Y = 90;     // 悬挂点距顶部的像素
 
   // ---------- 状态 ----------
@@ -81,12 +126,36 @@
   window.addEventListener('touchmove', onMove, { passive: false });
   window.addEventListener('touchend', onUp);
 
+  // ---------- 控制面板：滑块与重置 ----------
+  var sL = document.getElementById('sL');
+  var sG = document.getElementById('sG');
+  var sD = document.getElementById('sD');
+  var vL = document.getElementById('vL');
+  var vG = document.getElementById('vG');
+  var vD = document.getElementById('vD');
+  function syncControls() {
+    Lpx = parseFloat(sL.value);
+    g = parseFloat(sG.value);
+    damping = parseFloat(sD.value);
+    vL.textContent = Lpx.toFixed(0) + ' px';
+    vG.textContent = g.toFixed(1);
+    vD.textContent = damping.toFixed(3);
+  }
+  [sL, sG, sD].forEach(function (el) { el.addEventListener('input', syncControls); });
+  syncControls();
+  document.getElementById('reset').addEventListener('click', function () {
+    theta = 45 * Math.PI / 180;
+    omega = 0;
+    trail.length = 0;
+  });
+
   // ---------- 物理积分（半隐式欧拉，稳定） ----------
   function step(dt) {
     if (dragging) return;
-    // 真实单摆方程：θ'' = -(g/L)·sinθ
+    // 真实单摆方程：θ'' = -(g/L)·sinθ - d·ω（阻尼项让摆动自然衰减）
     // 当摆角很小时 sinθ≈θ，退化为简谐振动 θ'' = -(g/L)·θ
-    var alpha = -(g / L_PHYS) * Math.sin(theta);
+    var Lphys = Lpx / 100;
+    var alpha = -(g / Lphys) * Math.sin(theta) - damping * omega;
     omega += alpha * dt;
     theta += omega * dt;
   }
@@ -97,8 +166,9 @@
     ctx.fillStyle = '#1a1a24';
     ctx.fillRect(0, 0, W, H);
 
-    var bx = cx + L_PX * Math.sin(theta);
-    var by = PIVOT_Y + L_PX * Math.cos(theta);
+    var Lphys = Lpx / 100;
+    var bx = cx + Lpx * Math.sin(theta);
+    var by = PIVOT_Y + Lpx * Math.cos(theta);
 
     // 运动轨迹（渐隐）
     trail.push({ x: bx, y: by });
@@ -152,7 +222,7 @@
     // HUD 数值
     document.getElementById('ang').textContent = (theta * 180 / Math.PI).toFixed(1) + '°';
     document.getElementById('vel').textContent = omega.toFixed(2) + ' rad/s';
-    document.getElementById('per').textContent = (2 * Math.PI * Math.sqrt(L_PHYS / g)).toFixed(2) + ' s';
+    document.getElementById('per').textContent = (2 * Math.PI * Math.sqrt(Lphys / g)).toFixed(2) + ' s';
   }
 
   // ---------- 主循环 ----------
