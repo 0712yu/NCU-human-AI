@@ -74,8 +74,7 @@
     <label>阻尼 d：<span class="val" id="vD">0.004</span></label>
     <input type="range" id="sD" min="0" max="0.010" step="0.001" value="0.004">
   </div>
-  <!-- BUG: 内联 onclick 只能访问全局作用域，而 resetAnimation 定义在下方 IIFE 闭包内 -->
-  <button id="reset" onclick="resetAnimation()">重置摆动</button>
+  <button id="reset">重置摆动</button>
 </div>
 
 <script>
@@ -145,14 +144,14 @@
   [sL, sG, sD].forEach(function (el) { el.addEventListener('input', syncControls); });
   syncControls();
 
-  // ---------- 重置（故意留在闭包内，不暴露到全局，制造 bug） ----------
-  // 该函数在 IIFE 作用域内，全局不可见；
-  // 按钮用内联 onclick="resetAnimation()" 调用，点击时全局查找不到 → ReferenceError。
+  // ---------- 重置：闭包内具名函数，通过 addEventListener 绑定 ----------
+  // 修复作用域错配：不再用内联 onclick，避免全局查找找不到本函数。
   function resetAnimation() {
     theta = 45 * Math.PI / 180;
     omega = 0;
     trail.length = 0;
   }
+  document.getElementById('reset').addEventListener('click', resetAnimation);
 
   // ---------- 物理积分（半隐式欧拉，含阻尼） ----------
   function step(dt) {
