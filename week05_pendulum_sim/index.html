@@ -143,11 +143,15 @@
   }
   [sL, sG, sD].forEach(function (el) { el.addEventListener('input', syncControls); });
   syncControls();
-  document.getElementById('reset').addEventListener('click', function () {
+  // 重置：定义为 IIFE 闭包内的具名函数，并通过 addEventListener 绑定。
+  // 切勿在 HTML 写 onclick="resetAnimation()" —— 内联处理器只能访问全局作用域，
+  // 而本函数在闭包内，会触发 ReferenceError: resetAnimation is not defined。
+  function resetAnimation() {
     theta = 45 * Math.PI / 180;
     omega = 0;
     trail.length = 0;
-  });
+  }
+  document.getElementById('reset').addEventListener('click', resetAnimation);
 
   // ---------- 物理积分（半隐式欧拉，稳定） ----------
   function step(dt) {
