@@ -1,0 +1,8 @@
+[33mfe349f5[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m fix(starter): scope-safe reset binding in buggy practice (remove inline onclick)
+[33mdf44146[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m chore(starter): add buggy pendulum practice (reset onclick scope bug)
+[33mc600b87[m fix(week05): scope-safe reset button binding (remove inline onclick, named resetAnimation)
+[33md50625d[m feat(week05): add interactive control panel (L/g/damping sliders + reset)
+[33m90cb100[m feat(week05): add native canvas pendulum simulator (index.html)
+[33m6268128[m feat(week05): init pendulum experiment workspace
+[33m7425e6d[m docs: 在 README 中添加 GitHub 仓库公开地址
+[33m61a08f3[m init: 初始化课程作品集主仓库（README + .gitignore + 16 周实验目录 + 南昌大学标识）
